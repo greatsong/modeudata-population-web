@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🏘️ 우리 동네 인구 구조 · 모두의 데이터 분석 with AI</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root{
+    --gold:#F4B400; --accent:#E8930C; --bg:#FFFDF7; --card:#FFF6E0;
+    --border:#F0E2BC; --text:#3A2E1A; --muted:#9A8B6A; --blue:#4C8DF6; --pink:#F4789B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 60px}
+  h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin:.2rem 0}
+  h1 .a{color:var(--accent)}
+  .under{width:64px;height:4px;border-radius:999px;
+         background:linear-gradient(90deg,var(--gold),#FFD766);margin:.4rem 0 1rem}
+  .lead{color:#6B5836;margin:.2rem 0 1.2rem;line-height:1.5}
+  .controls{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .controls label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:4px;font-weight:600}
+  select{font-size:1rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:.7rem;
+         background:#fff;color:var(--text);min-width:180px}
+  .f1{flex:1 1 160px} .f2{flex:2 1 320px}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:8px 0}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:.9rem;padding:.9rem 1.1rem;
+        box-shadow:0 1px 4px rgba(180,140,20,.1)}
+  .card .k{font-size:.8rem;color:#6B5836;font-weight:600}
+  .card .v{font-size:1.7rem;font-weight:800;color:var(--accent);margin-top:.15rem}
+  .sub{color:var(--muted);font-size:.86rem;margin:.4rem 0 0}
+  h3{font-weight:800;letter-spacing:-.01em;margin:1.6rem 0 .2rem}
+  .risk{display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:center;margin-top:.4rem}
+  .ind{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .ind .card .v{font-size:1.4rem}
+  .tabs{display:flex;gap:6px;border-bottom:2px solid var(--border);margin:1.6rem 0 0}
+  .tab{padding:.6rem .9rem;cursor:pointer;font-weight:700;color:var(--muted);
+       border-bottom:3px solid transparent;margin-bottom:-2px}
+  .tab.on{color:var(--accent);border-bottom-color:var(--gold)}
+  .panel{display:none;padding-top:14px}
+  .panel.on{display:block}
+  table{width:100%;border-collapse:collapse;font-size:.95rem}
+  th,td{padding:.55rem .6rem;border-bottom:1px solid var(--border);text-align:left}
+  th{color:#6B5836;font-weight:700;background:#FFFaee}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  .foot{color:var(--muted);font-size:.82rem;margin-top:2rem;border-top:1px solid var(--border);padding-top:1rem}
+  .chip{display:inline-block;padding:.1rem .5rem;border-radius:999px;font-size:.78rem;font-weight:700}
+  @media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}.risk{grid-template-columns:1fr}}
+  #loading{padding:2rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🏘️ 우리 동네 <span class="a">인구 구조</span></h1>
+  <div class="under"></div>
+  <p class="lead">연령·성별 인구로 동네의 ‘나이 지도’를 그려 봅니다. 기본은 <b>2026년 5월 행정안전부 주민등록 인구</b>
+     (전국 3,918개 행정구역). 시·도와 행정구역을 골라 보세요.<br>
+     <span style="font-size:.9rem;color:var(--muted)">📚 『모두의 데이터 분석 with AI』 3장 · 웹(GitHub Pages)판</span></p>
+
+  <div id="loading">데이터를 불러오는 중이에요… ⏳</div>
+
+  <div id="app" style="display:none">
+    <div class="controls">
+      <div class="f1"><label>시 / 도</label><select id="sido"></select></div>
+      <div class="f2"><label>행정구역 (시군구·동) — 골라 보세요</label><select id="town"></select></div>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="k">총인구</div><div class="v" id="m_total">–</div></div>
+      <div class="card"><div class="k">평균 연령</div><div class="v" id="m_mean">–</div></div>
+      <div class="card"><div class="k">고령화율(65+)</div><div class="v" id="m_old">–</div></div>
+      <div class="card"><div class="k">유소년(0–14)</div><div class="v" id="m_youth">–</div></div>
+    </div>
+    <p class="sub" id="m_gender"></p>
+
+    <h3>📉 인구 위험 지표</h3>
+    <div class="risk">
+      <div>
+        <div id="gauge"></div>
+        <p class="sub">지방소멸위험지수 = 20~39세 여성 ÷ 65세 이상 인구. 0.5 미만이면 ‘소멸위험’ 단계예요.</p>
+      </div>
+      <div class="ind">
+        <div class="card"><div class="k">소멸위험지수</div><div class="v" id="m_ext">–</div><div class="sub" id="m_band"></div></div>
+        <div class="card"><div class="k">중위 연령</div><div class="v" id="m_med">–</div></div>
+        <div class="card"><div class="k">노령화지수</div><div class="v" id="m_aging">–</div></div>
+        <div class="card"><div class="k">노년부양비</div><div class="v" id="m_dep">–</div></div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab on" data-p="pyr">🔺 인구 피라미드</div>
+      <div class="tab" data-p="dist">📈 연령 분포</div>
+      <div class="tab" data-p="cmp">🆚 동네 비교</div>
+      <div class="tab" data-p="twin">👯 쌍둥이 동네</div>
+    </div>
+
+    <div class="panel on" id="p_pyr">
+      <div id="pyr"></div>
+      <p class="sub">왼쪽이 남자, 오른쪽이 여자, 한 칸이 1살이에요. 맨 위(100)는 ‘100세 이상’. 위가 넓으면 나이 든 동네, 아래가 넓으면 젊은 동네예요.</p>
+    </div>
+    <div class="panel" id="p_dist">
+      <div id="dist"></div>
+      <p class="sub">봉우리가 어디에 있나요? 20–40대가 높으면 직장·대학가, 0–10대와 30–40대가 함께 높으면 ‘아이 키우는 동네’예요.</p>
+    </div>
+    <div class="panel" id="p_cmp">
+      <div class="controls">
+        <div class="f1"><label>동네 A</label><select id="cmpA"></select></div>
+        <div class="f1"><label>동네 B</label><select id="cmpB"></select></div>
+        <div class="f1"><label>&nbsp;</label>
+          <label style="font-weight:600;color:var(--text)"><input type="checkbox" id="cmpNorm" checked> 비율(%)로 비교</label></div>
+      </div>
+      <div id="cmp"></div>
+    </div>
+    <div class="panel" id="p_twin">
+      <p class="sub">연령·성별 인구의 ‘모양’이 가장 비슷한 동네를 찾아요(코사인 유사도). 읍·면·동 단위끼리 비교합니다.</p>
+      <table><thead><tr><th>행정구역</th><th class="n">닮은 정도</th><th class="n">평균연령</th><th class="n">소멸위험지수</th></tr></thead>
+        <tbody id="twinBody"></tbody></table>
+      <div id="twin" style="margin-top:14px"></div>
+      <p class="sub">선택한 동네(⭐)와 쌍둥이들의 연령 비율을 겹쳐 봤어요. 선이 거의 포개질수록 인구 구조가 ‘쌍둥이’처럼 닮은 거예요.</p>
+    </div>
+  </div>
+
+  <div class="foot">데이터: 2026년 5월 행정안전부 주민등록 인구현황 · 그래프: Plotly.js · 모두의 데이터 분석 with AI</div>
+</div>
+
+<script>
+const AGES = Array.from({length:101}, (_,i)=>i);
+const PLOT = {responsive:true, displayModeBar:false};
+const FONT = {family:'-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif'};
+let ROWS = [];          // {name, sido, male:[101], female:[101]}
+let LEAF = [];          // 읍/면/동 only, with unit vector for twin search
+
+// ---------- CSV 파싱 ----------
+function parseCSV(text){
+  text = text.replace(/^﻿/, '');                 // BOM 제거
+  const lines = text.split(/\r?\n/).filter(l=>l.length);
+  const header = lines[0].split(',');
+  const idx = {};
+  header.forEach((h,i)=> idx[h.trim()] = i);
+  const mcol = AGES.map(a => idx[a<100 ? `남자_${a}세` : '남자_100세이상']);
+  const fcol = AGES.map(a => idx[a<100 ? `여자_${a}세` : '여자_100세이상']);
+  const nameI = idx['행정구역'];
+  const rows = [];
+  for(let r=1; r<lines.length; r++){
+    const c = lines[r].split(',');
+    const name = c[nameI];
+    const male = mcol.map(i => +c[i] || 0);
+    const female = fcol.map(i => +c[i] || 0);
+    rows.push({name, sido:name.split(' ')[0], male, female});
+  }
+  return rows;
+}
+
+// ---------- 지표 ----------
+const sum = a => a.reduce((x,y)=>x+y,0);
+function stats(row){
+  const cnt = AGES.map(a => row.male[a]+row.female[a]);
+  const total = sum(cnt);
+  const mean = sum(AGES.map(a=>a*cnt[a])) / Math.max(total,1);
+  const old = sum(cnt.slice(65)) / Math.max(total,1) * 100;
+  const youth = sum(cnt.slice(0,15)) / Math.max(total,1) * 100;
+  // 중위연령
+  let acc=0, med=100; const half=total/2;
+  for(let a=0;a<=100;a++){ acc+=cnt[a]; if(acc>=half){med=a;break;} }
+  // 소멸위험지수 = 20~39세 여성 / 65+ 전체
+  const women2039 = sum(row.female.slice(20,40));
+  const elderly = sum(row.male.slice(65)) + sum(row.female.slice(65));
+  const ext = women2039 / Math.max(elderly,1);
+  const aging = sum(cnt.slice(65)) / Math.max(sum(cnt.slice(0,15)),1) * 100;
+  const dep = sum(cnt.slice(65)) / Math.max(sum(cnt.slice(15,65)),1) * 100;
+  return {total, mean, old, youth, med, ext, aging, dep,
+          male:sum(row.male), female:sum(row.female), cnt};
+}
+function band(idx){
+  if(idx<0.2) return ['소멸 고위험','#E45756'];
+  if(idx<0.5) return ['소멸위험 진입','#F58518'];
+  if(idx<1.0) return ['소멸 주의','#E8C13F'];
+  if(idx<1.5) return ['보통','#88C580'];
+  return ['저위험','#54A24B'];
+}
+function fmtPop(n){ n=Math.round(n); return n>=10000 ? (n/10000).toFixed(1)+'만 명' : n.toLocaleString()+'명'; }
+
+// ---------- SVG 게이지 ----------
+function gauge(value, label, color, vmax=2.0){
+  const cx=160, cy=150, R=118;
+  const pt = v => { const ang = Math.PI*(1 - Math.min(Math.max(v,0),vmax)/vmax);
+                    return [cx+R*Math.cos(ang), cy-R*Math.sin(ang)]; };
+  const zones=[[0,.2,'#E45756'],[.2,.5,'#F58518'],[.5,1,'#E8C13F'],[1,1.5,'#88C580'],[1.5,2,'#54A24B']];
+  let arcs='';
+  zones.forEach(([a,b,c])=>{ const [x0,y0]=pt(a), [x1,y1]=pt(b);
+    arcs+=`<path d="M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${R} ${R} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}" fill="none" stroke="${c}" stroke-width="22"/>`; });
+  const [nx,ny]=pt(value);
+  return `<svg width="320" height="190" viewBox="0 0 320 190">${arcs}
+    <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="#3A2E1A" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="${cx}" cy="${cy}" r="7" fill="#3A2E1A"/>
+    <text x="${cx}" y="${cy-28}" text-anchor="middle" font-size="30" font-weight="800" fill="${color}">${value.toFixed(2)}</text>
+    <text x="${cx}" y="183" text-anchor="middle" font-size="16" font-weight="700" fill="${color}">${label}</text>
+    <text x="38" y="178" font-size="11" fill="#9A8B6A">0</text>
+    <text x="268" y="178" font-size="11" fill="#9A8B6A">2.0+</text></svg>`;
+}
+
+// ---------- 렌더 ----------
+function byName(name){ return ROWS.find(r=>r.name===name); }
+function pyramid(row){
+  const lim = Math.max(...row.male, ...row.female)*1.1;
+  const data=[
+    {type:'bar',orientation:'h',name:'남자',y:AGES,x:row.male.map(v=>-v),marker:{color:'#4C8DF6'},
+     customdata:row.male,hovertemplate:'%{y}세 · 남 %{customdata:,}명<extra></extra>'},
+    {type:'bar',orientation:'h',name:'여자',y:AGES,x:row.female,marker:{color:'#F4789B'},
+     hovertemplate:'%{y}세 · 여 %{x:,}명<extra></extra>'}];
+  Plotly.react('pyr',data,{barmode:'relative',bargap:.12,height:760,font:FONT,
+    margin:{l:50,r:20,t:30,b:40},legend:{orientation:'h',y:1.04},
+    xaxis:{title:'인구 수',range:[-lim,lim],tickvals:[-lim/2,0,lim/2],
+           ticktext:[Math.round(lim/2).toLocaleString(),'0',Math.round(lim/2).toLocaleString()]},
+    yaxis:{title:'나이(세)',dtick:10,range:[-1,101]},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
+}
+function distribution(row){
+  const total=AGES.map(a=>row.male[a]+row.female[a]);
+  const data=[{type:'scatter',mode:'lines',x:AGES,y:total,fill:'tozeroy',
+    line:{color:'#E8930C'},fillcolor:'rgba(244,180,0,0.25)',name:'전체',
+    hovertemplate:'%{x}세 · %{y:,}명<extra></extra>'}];
+  Plotly.react('dist',data,{height:440,font:FONT,margin:{l:55,r:20,t:20,b:45},
+    xaxis:{title:'나이(세)'},yaxis:{title:'인구 수'},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
+}
+function compare(){
+  const a=byName(document.getElementById('cmpA').value);
+  const b=byName(document.getElementById('cmpB').value);
+  const norm=document.getElementById('cmpNorm').checked;
+  const line=(row)=>{ let t=AGES.map(x=>row.male[x]+row.female[x]);
+    if(norm){const s=Math.max(sum(t),1); t=t.map(v=>v/s*100);} return t; };
+  const data=[
+    {type:'scatter',mode:'lines',x:AGES,y:line(a),name:a.name,line:{color:'#E8930C'}},
+    {type:'scatter',mode:'lines',x:AGES,y:line(b),name:b.name,line:{color:'#4C8DF6'}}];
+  Plotly.react('cmp',data,{height:440,font:FONT,margin:{l:55,r:20,t:20,b:45},
+    legend:{orientation:'h',y:1.1},xaxis:{title:'나이(세)'},
+    yaxis:{title:norm?'비율(%)':'인구 수'},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
+}
+function twins(row){
+  // 선택 동네 단위벡터
+  const sv=AGES.map(a=>row.male[a]+row.female[a]);
+  const sn=Math.hypot(...sv)||1; const su=sv.map(v=>v/sn);
+  const scored=LEAF.filter(L=>L.name!==row.name)
+    .map(L=>({L, s: L.unit.reduce((acc,v,i)=>acc+v*su[i],0)}))
+    .sort((x,y)=>y.s-x.s).slice(0,5);
+  // 표
+  const tb=document.getElementById('twinBody'); tb.innerHTML='';
+  scored.forEach(({L,s})=>{ const st=stats(L.row);
+    tb.insertAdjacentHTML('beforeend',
+      `<tr><td>${L.name}</td><td class="n">${(s*100).toFixed(1)}%</td>
+       <td class="n">${st.mean.toFixed(1)}세</td><td class="n">${st.ext.toFixed(2)}</td></tr>`); });
+  // 겹쳐 보기(비율)
+  const prop=(r)=>{ const t=AGES.map(a=>r.male[a]+r.female[a]); const s=Math.max(sum(t),1); return t.map(v=>v/s*100); };
+  const data=[{type:'scatter',mode:'lines',x:AGES,y:prop(row),name:'⭐ '+row.name,line:{width:3,color:'#E8930C'}}];
+  scored.forEach(({L})=> data.push({type:'scatter',mode:'lines',x:AGES,y:prop(L.row),name:L.name,opacity:.8}));
+  Plotly.react('twin',data,{height:440,font:FONT,margin:{l:55,r:20,t:20,b:45},
+    legend:{orientation:'h',y:1.15},xaxis:{title:'나이(세)'},yaxis:{title:'비율(%)'},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
+}
+
+function render(){
+  const row=byName(document.getElementById('town').value);
+  if(!row) return;
+  const s=stats(row);
+  document.getElementById('m_total').textContent=fmtPop(s.total);
+  document.getElementById('m_mean').textContent=s.mean.toFixed(1)+'세';
+  document.getElementById('m_old').textContent=s.old.toFixed(1)+'%';
+  document.getElementById('m_youth').textContent=s.youth.toFixed(1)+'%';
+  document.getElementById('m_gender').textContent=
+    `남자 ${s.male.toLocaleString()}명 · 여자 ${s.female.toLocaleString()}명 (남 ${(s.male/Math.max(s.total,1)*100).toFixed(1)}% · 여 ${(s.female/Math.max(s.total,1)*100).toFixed(1)}%)`;
+  const [bl,bc]=band(s.ext);
+  document.getElementById('gauge').innerHTML=gauge(s.ext,bl,bc);
+  document.getElementById('m_ext').textContent=s.ext.toFixed(2);
+  const mb=document.getElementById('m_band'); mb.textContent=bl; mb.style.color=bc;
+  document.getElementById('m_med').textContent=s.med+'세';
+  document.getElementById('m_aging').textContent=Math.round(s.aging);
+  document.getElementById('m_dep').textContent=Math.round(s.dep);
+  pyramid(row); distribution(row); compare(); twins(row);
+}
+
+// ---------- 셀렉트 채우기 ----------
+function fillTowns(){
+  const sido=document.getElementById('sido').value;
+  const list=ROWS.filter(r=>r.sido===sido).map(r=>r.name);
+  const opt=list.map(n=>`<option>${n}</option>`).join('');
+  ['town','cmpA','cmpB'].forEach(id=>document.getElementById(id).innerHTML=opt);
+  document.getElementById('cmpB').selectedIndex=Math.min(1,list.length-1);
+  render();
+}
+
+fetch('population_2026_05.csv').then(r=>r.text()).then(text=>{
+  ROWS=parseCSV(text);
+  LEAF=ROWS.filter(r=>/[동읍면]$/.test(r.name)).map(r=>{
+    const t=AGES.map(a=>r.male[a]+r.female[a]); const s=sum(t)||1;
+    const p=t.map(v=>v/s); const n=Math.hypot(...p)||1;
+    return {name:r.name, unit:p.map(v=>v/n), row:r};
+  });
+  const sidos=[...new Set(ROWS.map(r=>r.sido))];
+  document.getElementById('sido').innerHTML=sidos.map(s=>`<option>${s}</option>`).join('');
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('sido').addEventListener('change',fillTowns);
+  ['town'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+  ['cmpA','cmpB','cmpNorm'].forEach(id=>document.getElementById(id).addEventListener('change',compare));
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+    t.classList.add('on'); document.getElementById('p_'+t.dataset.p).classList.add('on');
+    window.dispatchEvent(new Event('resize'));   // 숨겨졌던 그래프 리사이즈
+  }));
+  fillTowns();
+}).catch(e=>{ document.getElementById('loading').textContent='데이터를 불러오지 못했어요: '+e; });
+</script>
+</body>
+</html>
