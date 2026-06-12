@@ -1,0 +1,3 @@
+[2026-06-12T09:41:29.473Z] GET https://greatsong.github.io/modeudata-population-web/ → 200 (474ms, 21679B)
+[2026-06-12T09:41:29.958Z] GET https://cdn.plot.ly/plotly-2.35.2.min.js → pending (?ms, ?B)
+[2026-06-12T09:41:31.483Z] GET https://greatsong.github.io/modeudata-population-web/population_2026_05.csv → 200 (325ms, ?B)

@@ -98,6 +98,7 @@
       <div class="tab" data-p="dist">📈 연령 분포</div>
       <div class="tab" data-p="cmp">🆚 동네 비교</div>
       <div class="tab" data-p="twin">👯 쌍둥이 동네</div>
+      <div class="tab" data-p="map">🗺️ 지도</div>
     </div>
 
     <div class="panel on" id="p_pyr">
@@ -124,6 +125,15 @@
       <div id="twin" style="margin-top:14px"></div>
       <p class="sub">선택한 동네(⭐)와 쌍둥이들의 연령 비율을 겹쳐 봤어요. 선이 거의 포개질수록 인구 구조가 ‘쌍둥이’처럼 닮은 거예요.</p>
     </div>
+    <div class="panel" id="p_map">
+      <div style="margin-bottom:10px"><b style="font-size:.9rem">점 색깔로 볼 지표:</b>
+        <label style="margin-left:8px"><input type="radio" name="mapmetric" value="ext" checked> 소멸위험지수</label>
+        <label style="margin-left:10px"><input type="radio" name="mapmetric" value="mean"> 평균연령</label>
+        <label style="margin-left:10px"><input type="radio" name="mapmetric" value="total"> 총인구</label>
+      </div>
+      <div id="map" style="height:600px;border:1px solid var(--border);border-radius:.9rem;overflow:hidden"></div>
+      <p class="sub" id="mapNote"></p>
+    </div>
   </div>
 
   <div class="foot">데이터: 2026년 5월 행정안전부 주민등록 인구현황 · 그래프: Plotly.js · 모두의 데이터 분석 with AI · <span style="opacity:.7">빌드 2026-06-12</span></div>
@@ -133,8 +143,9 @@
 const AGES = Array.from({length:101}, (_,i)=>i);
 const PLOT = {responsive:true, displayModeBar:false};
 const FONT = {family:'-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif'};
-let ROWS = [];          // {name, sido, male:[101], female:[101]}
+let ROWS = [];          // {name, code, sido, male:[101], female:[101]}
 let LEAF = [];          // 읍/면/동 only, with unit vector for twin search
+let CENT = new Map();   // 코드 → {lat, lon} 행정동 중심점
 
 // ---------- CSV 파싱 (따옴표·콤마숫자 대응) ----------
 function csvParse(text){
@@ -163,12 +174,16 @@ function buildRows(table){
     return header.findIndex(h=>h.endsWith(suf));
   });
   const mcol=finder('남자','남'), fcol=finder('여자','여');
+  const codeI = idx['코드'];   // 행정동 코드(지도 연결용)
   const rows=[];
   for(let r=1;r<table.length;r++){ const c=table[r];
     if(!c[nameI]) continue;
-    const name=c[nameI].replace(/\s*\([0-9]+\)\s*$/,'').trim();
+    const rawname=c[nameI];
+    const name=rawname.replace(/\s*\([0-9]+\)\s*$/,'').trim();
     if(!name) continue;
-    rows.push({name, sido:name.split(' ')[0],
+    let code = codeI!=null ? c[codeI] : null;
+    if(!code){ const mm=rawname.match(/\((\d+)\)/); code = mm?mm[1]:null; }
+    rows.push({name, code, sido:name.split(' ')[0],
       male: mcol.map(i=>i>=0?num(c[i]):0),
       female: fcol.map(i=>i>=0?num(c[i]):0)});
   }
@@ -299,6 +314,32 @@ function twins(row){
     paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
 }
 
+function mapView(){
+  if(!CENT.size){ document.getElementById('mapNote').textContent='중심점 데이터를 불러오는 중이에요…'; return; }
+  const sido=document.getElementById('sido').value;
+  const pool=(sido==='전국')?ROWS.filter(r=>r.sido!=='전국'):ROWS.filter(r=>r.sido===sido);
+  const dong=pool.filter(r=>/[동읍면]$/.test(r.name) && r.code && CENT.has(r.code));
+  const metric=document.querySelector('input[name=mapmetric]:checked').value;
+  const lat=[],lon=[],val=[],txt=[];
+  dong.forEach(r=>{ const c=CENT.get(r.code), s=stats(r);
+    const v = metric==='ext'?s.ext : metric==='mean'?s.mean : s.total;
+    lat.push(c.lat); lon.push(c.lon); val.push(v);
+    txt.push(r.name+'<br>'+(metric==='ext'?'소멸위험지수 '+v.toFixed(2)
+      :metric==='mean'?'평균연령 '+v.toFixed(1)+'세':'총인구 '+Math.round(v).toLocaleString()+'명'));
+  });
+  const scale = metric==='ext'?'RdYlGn':metric==='mean'?'RdBu':'Viridis';
+  const clat=lat.reduce((a,b)=>a+b,0)/Math.max(lat.length,1);
+  const clon=lon.reduce((a,b)=>a+b,0)/Math.max(lon.length,1);
+  const data=[{type:'scattermapbox',lat,lon,text:txt,hoverinfo:'text',mode:'markers',
+    marker:{size:8,opacity:.82,color:val,colorscale:scale,reversescale:false,
+      showscale:true,colorbar:{thickness:12,len:.8}}}];
+  Plotly.newPlot('map',data,{margin:{l:0,r:0,t:0,b:0},font:FONT,
+    mapbox:{style:'carto-positron',center:{lat:clat||36.5,lon:clon||127.8},zoom:sido==='전국'?5.5:9.5}},
+    {responsive:true,displayModeBar:false});
+  document.getElementById('mapNote').textContent=
+    `점 하나가 읍·면·동(${dong.length.toLocaleString()}개)이에요. 색이 진할수록 값이 높아요. 마우스를 올리면 이름·값이 보여요.`;
+}
+
 function render(){
   const row=byName(document.getElementById('town').value);
   if(!row) return;
@@ -327,6 +368,7 @@ function fillTowns(){
   ['town','cmpA','cmpB'].forEach(id=>document.getElementById(id).innerHTML=opt);
   document.getElementById('cmpB').selectedIndex=Math.min(1,list.length-1);
   render();
+  if(document.getElementById('p_map').classList.contains('on')) mapView();
 }
 
 const SIDO_ORDER=['서울특별시','부산광역시','대구광역시','인천광역시','광주광역시','대전광역시','울산광역시','세종특별자치시','경기도','강원특별자치도','충청북도','충청남도','전북특별자치도','전라남도','경상북도','경상남도','제주특별자치도'];
@@ -365,7 +407,9 @@ function wire(){
     document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
     t.classList.add('on'); document.getElementById('p_'+t.dataset.p).classList.add('on');
     window.dispatchEvent(new Event('resize'));   // 숨겨졌던 그래프 리사이즈
+    if(t.dataset.p==='map') mapView();
   }));
+  document.querySelectorAll('input[name=mapmetric]').forEach(r=>r.addEventListener('change',mapView));
   document.getElementById('file').addEventListener('change',ev=>{
     const f=ev.target.files[0]; if(!f) return;
     const note=document.getElementById('upnote'); note.textContent='읽는 중…'; note.style.color='';
@@ -377,6 +421,12 @@ function wire(){
     }).catch(e=>{ note.textContent='업로드 실패: '+e; note.style.color='#E45756'; });
   });
 }
+// 중심점(위경도)도 함께 로딩 → 코드별 Map
+fetch('dong_centroids.csv').then(r=>r.text()).then(t=>{
+  csvParse(t).slice(1).forEach(row=>{ if(row[0]) CENT.set(String(row[0]).trim(), {lat:+row[1], lon:+row[2]}); });
+  if(document.getElementById('p_map').classList.contains('on')) mapView();
+}).catch(()=>{});
+
 fetch('population_2026_05.csv').then(r=>r.text()).then(text=>{
   document.getElementById('loading').style.display='none';
   document.getElementById('app').style.display='block';
