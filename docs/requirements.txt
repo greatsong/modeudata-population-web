@@ -1,0 +1,9 @@
+# 우리 동네 인구로 배우는 데이터 분석 & 머신러닝 교재 실습 환경
+# 설치:  pip install -r docs/requirements.txt
+pandas
+numpy
+matplotlib
+scikit-learn
+jupyter
+# 선택: 지도 배경 위에 군집을 그리고 싶다면 (10장)
+folium

@@ -10,3 +10,10 @@
 - 라이브: https://greatsong.github.io/modeudata-population-web/
 - 데이터: 행정안전부 연령별 인구현황(2026.5)
 - 그래프: Plotly.js (클라이언트 사이드, 서버 불필요)
+
+## 📚 입문 교재 (데이터 수집 → 머신러닝)
+
+이 코드를 기반으로 **데이터 수집부터 머신러닝(군집화)까지** 이어지는 파이썬 입문 교재를 [`docs/`](docs/README.md)에 담았습니다.
+pandas·matplotlib·scikit-learn으로 실습하며, 같은 로직이 이 웹앱(자바스크립트)에서 어떻게 구현됐는지도 매 장 비교합니다.
+
+→ **[교재 목차 보기](docs/README.md)** (0~10장 + 용어 사전·데이터 안내)
