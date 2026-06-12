@@ -124,6 +124,9 @@
         <tbody id="twinBody"></tbody></table>
       <div id="twin" style="margin-top:14px"></div>
       <p class="sub">선택한 동네(⭐)와 쌍둥이들의 연령 비율을 겹쳐 봤어요. 선이 거의 포개질수록 인구 구조가 ‘쌍둥이’처럼 닮은 거예요.</p>
+      <h4 style="margin:1.2rem 0 .3rem;font-weight:800">🗺️ 쌍둥이들은 어디에 있을까?</h4>
+      <div id="twinMap" style="height:420px;border:1px solid var(--border);border-radius:.9rem;overflow:hidden"></div>
+      <p class="sub">⭐ 선택한 동네와 쌍둥이들의 실제 위치예요. 멀리 떨어져 있어도 인구 구조는 닮았다는 뜻!</p>
     </div>
     <div class="panel" id="p_map">
       <div style="margin-bottom:10px"><b style="font-size:.9rem">점 색깔로 볼 지표:</b>
@@ -312,6 +315,32 @@ function twins(row){
   Plotly.react('twin',data,{height:440,font:FONT,margin:{l:55,r:20,t:20,b:45},
     legend:{orientation:'h',y:1.15},xaxis:{title:'나이(세)'},yaxis:{title:'비율(%)'},
     paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
+  twinMap(row, scored);
+}
+function twinMap(row, scored){
+  if(!CENT.size) return;
+  const sel = (row.code && CENT.has(row.code)) ? CENT.get(row.code) : null;
+  const tw = scored.map(({L})=>({name:L.name, c:CENT.get(L.row.code)})).filter(x=>x.c);
+  if(!tw.length){ Plotly.purge('twinMap'); return; }
+  const traces=[];
+  if(sel) tw.forEach(t=>traces.push({type:'scattermapbox',mode:'lines',
+    lat:[sel.lat,t.c.lat], lon:[sel.lon,t.c.lon],
+    line:{width:1,color:'rgba(232,147,12,.55)'}, hoverinfo:'skip', showlegend:false}));
+  traces.push({type:'scattermapbox',mode:'markers+text',
+    lat:tw.map(t=>t.c.lat), lon:tw.map(t=>t.c.lon),
+    text:tw.map(t=>t.name.split(' ').pop()), textposition:'top center',
+    marker:{size:11,color:'#4C8DF6'}, hovertext:tw.map(t=>t.name), hoverinfo:'text', showlegend:false});
+  if(sel) traces.push({type:'scattermapbox',mode:'markers+text',
+    lat:[sel.lat], lon:[sel.lon], text:['⭐ '+row.name.split(' ').pop()], textposition:'top center',
+    marker:{size:16,color:'#E8930C'}, hovertext:[row.name], hoverinfo:'text', showlegend:false});
+  const la=tw.map(t=>t.c.lat).concat(sel?[sel.lat]:[]);
+  const lo=tw.map(t=>t.c.lon).concat(sel?[sel.lon]:[]);
+  const span=Math.max(Math.max(...la)-Math.min(...la), Math.max(...lo)-Math.min(...lo));
+  const zoom = span>3?5.2:span>1?7:span>0.3?9:11;
+  Plotly.newPlot('twinMap',traces,{margin:{l:0,r:0,t:0,b:0},font:FONT,
+    mapbox:{style:'carto-positron',
+      center:{lat:la.reduce((a,b)=>a+b,0)/la.length, lon:lo.reduce((a,b)=>a+b,0)/lo.length}, zoom}},
+    {responsive:true,displayModeBar:false});
 }
 
 function mapView(){
@@ -424,6 +453,7 @@ function wire(){
 // 중심점(위경도)도 함께 로딩 → 코드별 Map
 fetch('dong_centroids.csv').then(r=>r.text()).then(t=>{
   csvParse(t).slice(1).forEach(row=>{ if(row[0]) CENT.set(String(row[0]).trim(), {lat:+row[1], lon:+row[2]}); });
+  if(ROWS.length) render();   // 중심점 늦게 도착하면 지도(쌍둥이/지도탭) 다시 그리기
   if(document.getElementById('p_map').classList.contains('on')) mapView();
 }).catch(()=>{});
 
