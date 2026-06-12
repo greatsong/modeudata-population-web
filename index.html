@@ -106,7 +106,7 @@
     </div>
     <div class="panel" id="p_dist">
       <div id="dist"></div>
-      <p class="sub">봉우리가 어디에 있나요? 20–40대가 높으면 직장·대학가, 0–10대와 30–40대가 함께 높으면 ‘아이 키우는 동네’예요.</p>
+      <p class="sub" id="distNote"></p>
     </div>
     <div class="panel" id="p_cmp">
       <div class="controls">
@@ -246,12 +246,22 @@ function pyramid(row){
 }
 function distribution(row){
   const total=AGES.map(a=>row.male[a]+row.female[a]);
-  const data=[{type:'scatter',mode:'lines',x:AGES,y:total,fill:'tozeroy',
-    line:{color:'#E8930C'},fillcolor:'rgba(244,180,0,0.25)',name:'전체',
-    hovertemplate:'%{x}세 · %{y:,}명<extra></extra>'}];
+  let peak=0, low=0;
+  for(let a=0;a<=100;a++) if(total[a]>total[peak]) peak=a;
+  for(let a=0;a<100;a++) if(total[a]<total[low]) low=a;   // 100세 이상 catch-all 제외
+  const data=[
+    {type:'scatter',mode:'lines',x:AGES,y:total,fill:'tozeroy',
+     line:{color:'#E8930C'},fillcolor:'rgba(244,180,0,0.25)',name:'전체',
+     hovertemplate:'%{x}세 · %{y:,}명<extra></extra>'},
+    {type:'scatter',mode:'markers+text',x:[peak,low],y:[total[peak],total[low]],
+     text:[`최다 ${peak}세`,`최소 ${low}세`],textposition:'top center',
+     marker:{size:11,color:['#E45756','#4C8DF6']},hoverinfo:'skip',showlegend:false}];
   Plotly.react('dist',data,{height:440,font:FONT,margin:{l:55,r:20,t:20,b:45},
     xaxis:{title:'나이(세)'},yaxis:{title:'인구 수'},
     paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
+  const n=document.getElementById('distNote');
+  if(n) n.innerHTML=`👴 인구가 가장 많은 나이: <b>${peak}세</b> (${total[peak].toLocaleString()}명) · `+
+    `👶 가장 적은 나이(100세 미만): <b>${low}세</b> (${total[low].toLocaleString()}명)`;
 }
 function compare(){
   const a=byName(document.getElementById('cmpA').value);
@@ -319,10 +329,21 @@ function fillTowns(){
   render();
 }
 
+const SIDO_ORDER=['서울특별시','부산광역시','대구광역시','인천광역시','광주광역시','대전광역시','울산광역시','세종특별자치시','경기도','강원특별자치도','충청북도','충청남도','전북특별자치도','전라남도','경상북도','경상남도','제주특별자치도'];
+function sidoOf(name){
+  if(name==='대한민국 전체') return '전국';
+  for(const s of SIDO_ORDER){ if(name===s || name.startsWith(s+' ')) return s; }
+  return null;   // 출장소 등 비정상 행
+}
 function initData(rows){
-  // 전국 합계 행(시·도 단위 행 합산)을 맨 앞에 → 기본은 전국
-  const sidoRows = rows.filter(r=>!r.name.includes(' '));
-  rows = [{name:'대한민국 전체', sido:'전국',
+  // 중복 행정구역 제거(세종 중복 등) + 비정상 행(출장소) 제외
+  const seen=new Set();
+  rows=rows.filter(r=>{ if(seen.has(r.name))return false; seen.add(r.name); return true; });
+  rows.forEach(r=>r.sido=sidoOf(r.name));
+  rows=rows.filter(r=>r.sido);
+  // 전국 합계 = 17개 시도 행의 합 (출장소·중복 제외)
+  const sidoRows=rows.filter(r=>SIDO_ORDER.includes(r.name));
+  rows=[{name:'대한민국 전체', sido:'전국',
     male: AGES.map(a=>sidoRows.reduce((s,r)=>s+r.male[a],0)),
     female: AGES.map(a=>sidoRows.reduce((s,r)=>s+r.female[a],0))}, ...rows];
   ROWS=rows;
@@ -331,7 +352,7 @@ function initData(rows){
     const p=t.map(v=>v/s); const n=Math.hypot(...p)||1;
     return {name:r.name, unit:p.map(v=>v/n), row:r};
   });
-  const sidos=[...new Set(ROWS.map(r=>r.sido))];
+  const sidos=['전국', ...SIDO_ORDER.filter(s=>rows.some(r=>r.sido===s))];
   document.getElementById('sido').innerHTML=sidos.map(s=>`<option>${s}</option>`).join('');
   fillTowns();
 }
