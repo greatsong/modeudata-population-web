@@ -65,6 +65,11 @@
       <div class="f1"><label>시 / 도</label><select id="sido"></select></div>
       <div class="f2"><label>행정구역 (시군구·동) — 골라 보세요</label><select id="town"></select></div>
     </div>
+    <div style="margin:-2px 0 14px">
+      <label style="font-size:.82rem;color:var(--muted);font-weight:600">📂 다른 달 CSV 올리기 — 행정안전부 ‘연령별 인구현황(월간)’ 파일을 그대로 올리면 돼요</label><br>
+      <input type="file" id="file" accept=".csv" style="margin-top:5px">
+      <span class="sub" id="upnote" style="margin-left:8px"></span>
+    </div>
 
     <div class="cards">
       <div class="card"><div class="k">총인구</div><div class="v" id="m_total">–</div></div>
@@ -131,25 +136,48 @@ const FONT = {family:'-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-s
 let ROWS = [];          // {name, sido, male:[101], female:[101]}
 let LEAF = [];          // 읍/면/동 only, with unit vector for twin search
 
-// ---------- CSV 파싱 ----------
-function parseCSV(text){
-  text = text.replace(/^﻿/, '');                 // BOM 제거
-  const lines = text.split(/\r?\n/).filter(l=>l.length);
-  const header = lines[0].split(',');
-  const idx = {};
-  header.forEach((h,i)=> idx[h.trim()] = i);
-  const mcol = AGES.map(a => idx[a<100 ? `남자_${a}세` : '남자_100세이상']);
-  const fcol = AGES.map(a => idx[a<100 ? `여자_${a}세` : '여자_100세이상']);
+// ---------- CSV 파싱 (따옴표·콤마숫자 대응) ----------
+function csvParse(text){
+  text = text.replace(/^﻿/,'').replace(/\r/g,'');
+  const out=[]; let row=[], f='', q=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch=='"'){ if(text[i+1]=='"'){f+='"';i++;} else q=false; } else f+=ch; }
+    else { if(ch=='"') q=true;
+      else if(ch==','){ row.push(f); f=''; }
+      else if(ch=='\n'){ row.push(f); out.push(row); row=[]; f=''; }
+      else f+=ch; } }
+  if(f.length||row.length){ row.push(f); out.push(row); }
+  return out.filter(r=>r.length>1 || (r[0]&&r[0].length));
+}
+const num = v => +(String(v).replace(/,/g,'')) || 0;
+
+// 내부형식(남자_0세…)이든 행정안전부 원본(2026년05월_남_0세…)이든 표준화
+function buildRows(table){
+  const header = table[0].map(h=>h.trim().replace(/^﻿/,''));
+  const idx={}; header.forEach((h,i)=>idx[h]=i);
   const nameI = idx['행정구역'];
-  const rows = [];
-  for(let r=1; r<lines.length; r++){
-    const c = lines[r].split(',');
-    const name = c[nameI];
-    const male = mcol.map(i => +c[i] || 0);
-    const female = fcol.map(i => +c[i] || 0);
-    rows.push({name, sido:name.split(' ')[0], male, female});
+  const finder = (full, sg) => AGES.map(a=>{
+    const want = a<100?`${full}_${a}세`:`${full}_100세이상`;
+    if(idx[want]!=null) return idx[want];
+    const suf = a<100?`_${sg}_${a}세`:`_${sg}_100세 이상`;
+    return header.findIndex(h=>h.endsWith(suf));
+  });
+  const mcol=finder('남자','남'), fcol=finder('여자','여');
+  const rows=[];
+  for(let r=1;r<table.length;r++){ const c=table[r];
+    if(!c[nameI]) continue;
+    const name=c[nameI].replace(/\s*\([0-9]+\)\s*$/,'').trim();
+    if(!name) continue;
+    rows.push({name, sido:name.split(' ')[0],
+      male: mcol.map(i=>i>=0?num(c[i]):0),
+      female: fcol.map(i=>i>=0?num(c[i]):0)});
   }
   return rows;
+}
+function decodeBuf(buf){
+  try{ return new TextDecoder('utf-8',{fatal:true}).decode(buf); }
+  catch(e){ try{ return new TextDecoder('euc-kr').decode(buf); }   // 행정안전부 cp949
+            catch(_){ return new TextDecoder('utf-8').decode(buf); } }
 }
 
 // ---------- 지표 ----------
@@ -291,8 +319,8 @@ function fillTowns(){
   render();
 }
 
-fetch('population_2026_05.csv').then(r=>r.text()).then(text=>{
-  ROWS=parseCSV(text);
+function initData(rows){
+  ROWS=rows;
   LEAF=ROWS.filter(r=>/[동읍면]$/.test(r.name)).map(r=>{
     const t=AGES.map(a=>r.male[a]+r.female[a]); const s=sum(t)||1;
     const p=t.map(v=>v/s); const n=Math.hypot(...p)||1;
@@ -300,10 +328,11 @@ fetch('population_2026_05.csv').then(r=>r.text()).then(text=>{
   });
   const sidos=[...new Set(ROWS.map(r=>r.sido))];
   document.getElementById('sido').innerHTML=sidos.map(s=>`<option>${s}</option>`).join('');
-  document.getElementById('loading').style.display='none';
-  document.getElementById('app').style.display='block';
+  fillTowns();
+}
+function wire(){
   document.getElementById('sido').addEventListener('change',fillTowns);
-  ['town'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+  document.getElementById('town').addEventListener('change',render);
   ['cmpA','cmpB','cmpNorm'].forEach(id=>document.getElementById(id).addEventListener('change',compare));
   document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
@@ -311,7 +340,22 @@ fetch('population_2026_05.csv').then(r=>r.text()).then(text=>{
     t.classList.add('on'); document.getElementById('p_'+t.dataset.p).classList.add('on');
     window.dispatchEvent(new Event('resize'));   // 숨겨졌던 그래프 리사이즈
   }));
-  fillTowns();
+  document.getElementById('file').addEventListener('change',ev=>{
+    const f=ev.target.files[0]; if(!f) return;
+    const note=document.getElementById('upnote'); note.textContent='읽는 중…'; note.style.color='';
+    f.arrayBuffer().then(buf=>{
+      const rows=buildRows(csvParse(decodeBuf(buf)));
+      if(!rows.length){ note.textContent='형식을 못 읽었어요. 행정안전부 월간 CSV가 맞는지 확인해 주세요.'; note.style.color='#E45756'; return; }
+      initData(rows);
+      note.textContent=`✅ 업로드: ${rows.length.toLocaleString()}개 행정구역`; note.style.color='#54A24B';
+    }).catch(e=>{ note.textContent='업로드 실패: '+e; note.style.color='#E45756'; });
+  });
+}
+fetch('population_2026_05.csv').then(r=>r.text()).then(text=>{
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='block';
+  wire();
+  initData(buildRows(csvParse(text)));
 }).catch(e=>{ document.getElementById('loading').textContent='데이터를 불러오지 못했어요: '+e; });
 </script>
 </body>
