@@ -320,6 +320,11 @@ function fillTowns(){
 }
 
 function initData(rows){
+  // 전국 합계 행(시·도 단위 행 합산)을 맨 앞에 → 기본은 전국
+  const sidoRows = rows.filter(r=>!r.name.includes(' '));
+  rows = [{name:'대한민국 전체', sido:'전국',
+    male: AGES.map(a=>sidoRows.reduce((s,r)=>s+r.male[a],0)),
+    female: AGES.map(a=>sidoRows.reduce((s,r)=>s+r.female[a],0))}, ...rows];
   ROWS=rows;
   LEAF=ROWS.filter(r=>/[동읍면]$/.test(r.name)).map(r=>{
     const t=AGES.map(a=>r.male[a]+r.female[a]); const s=sum(t)||1;
