@@ -114,6 +114,7 @@
       <div class="tab" data-p="dist">📈 연령 분포</div>
       <div class="tab" data-p="cmp">🆚 동네 비교</div>
       <div class="tab" data-p="twin">👯 쌍둥이 동네</div>
+      <div class="tab" data-p="clu">🧩 군집 분석</div>
       <div class="tab" data-p="map">🗺️ 지도</div>
     </div>
 
@@ -144,6 +145,39 @@
       <div id="twinMap" style="height:420px;border:1px solid var(--border);border-radius:.9rem;overflow:hidden"></div>
       <p class="sub">⭐ 선택한 동네와 쌍둥이들의 실제 위치예요. 멀리 떨어져 있어도 인구 구조는 닮았다는 뜻!</p>
     </div>
+    <div class="panel" id="p_clu">
+      <p class="sub">동네(읍·면·동)를 <b>인구 구조의 모양</b>으로 비슷한 것끼리 묶어요(K-평균 군집화).
+        연령별(101차원)·성별×연령별(202차원) 중 고르고, 원하면 <b>인구 규모</b>까지 함께 반영할 수 있어요.
+        흩어진 점 그림은 고차원 데이터를 2차원(주성분 분석, PCA)으로 눌러 보여 준 거예요.</p>
+      <div class="controls">
+        <div class="f1"><label>대상 범위</label><select id="cluScope"></select></div>
+        <div class="f1"><label>차원(특징)</label>
+          <select id="cluMode">
+            <option value="age">연령별 (101차원)</option>
+            <option value="sexage">성별·연령별 (202차원)</option>
+          </select></div>
+        <div class="f1"><label>군집 수 K</label>
+          <select id="cluK">
+            <option>2</option><option>3</option><option selected>4</option><option>5</option>
+            <option>6</option><option>7</option><option>8</option>
+          </select></div>
+        <div class="f1"><label>&nbsp;</label>
+          <label style="font-weight:600;color:var(--text)"><input type="checkbox" id="cluSize"> 인구 규모도 차원에 반영</label></div>
+      </div>
+      <div id="cluNote2" class="sub" style="margin:0 0 6px"></div>
+      <div id="cluScatter"></div>
+      <p class="sub">점 하나가 동네예요. 색이 같으면 인구 구조가 닮은 ‘같은 군집’이에요. 마우스를 올리면 동네 이름·총인구·평균연령이 보여요.</p>
+      <h4 style="margin:1.4rem 0 .3rem;font-weight:800">📈 군집별 평균 연령 분포</h4>
+      <div id="cluProfile"></div>
+      <p class="sub">각 군집에 속한 동네들의 평균적인 연령 비율 곡선이에요. 곡선 모양이 그 군집의 ‘인구 성격’을 말해 줘요.</p>
+      <h4 style="margin:1.4rem 0 .3rem;font-weight:800">📋 군집 요약</h4>
+      <table><thead><tr><th>군집</th><th class="n">동네 수</th><th class="n">평균연령</th>
+        <th class="n">평균 총인구</th><th class="n">평균 소멸위험</th><th>대표 동네</th></tr></thead>
+        <tbody id="cluBody"></tbody></table>
+      <h4 style="margin:1.4rem 0 .3rem;font-weight:800">🗺️ 군집 지도</h4>
+      <div id="cluMap" style="height:520px;border:1px solid var(--border);border-radius:.9rem;overflow:hidden"></div>
+      <p class="sub">같은 색 점끼리 같은 군집이에요. 멀리 떨어져 있어도 인구 구조가 닮으면 같은 색으로 묶여요.</p>
+    </div>
     <div class="panel" id="p_map">
       <div style="margin-bottom:10px"><b style="font-size:.9rem">점 색깔로 볼 지표:</b>
         <label style="margin-left:8px"><input type="radio" name="mapmetric" value="ext" checked> 소멸위험지수</label>
@@ -155,7 +189,7 @@
     </div>
   </div>
 
-  <div class="foot">데이터: 2026년 5월 행정안전부 주민등록 인구현황 · 그래프: Plotly.js · 모두의 데이터 분석 with AI · <span style="opacity:.7">빌드 2026-06-12</span></div>
+  <div class="foot">데이터: 2026년 5월 행정안전부 주민등록 인구현황 · 그래프: Plotly.js · 모두의 데이터 분석 with AI · <span style="opacity:.7">빌드 2026-06-12 · 군집 분석 추가</span></div>
 </div>
 
 <script>
@@ -385,6 +419,190 @@ function mapView(){
     `점 하나가 읍·면·동(${dong.length.toLocaleString()}개)이에요. 색이 진할수록 값이 높아요. 마우스를 올리면 이름·값이 보여요.`;
 }
 
+// ---------- 군집 분석 (K-평균 + PCA) ----------
+const CLU_COLORS=['#E8930C','#4C8DF6','#54A24B','#E45756','#B279A2','#3BA6A0','#F58518','#9C755F'];
+let cluDirty=true;
+
+function cluFeatures(rows, mode, includeSize){
+  return rows.map(r=>{
+    let f;
+    if(mode==='sexage'){
+      const tot=Math.max(sum(r.male)+sum(r.female),1);
+      f=r.male.map(v=>v/tot).concat(r.female.map(v=>v/tot));   // 202차원
+    }else{
+      const t=AGES.map(a=>r.male[a]+r.female[a]); const s=Math.max(sum(t),1);
+      f=t.map(v=>v/s);                                          // 101차원
+    }
+    if(includeSize) f=f.concat([Math.log10(sum(r.male)+sum(r.female)+1)]);
+    return f;
+  });
+}
+// 열별 z-점수 표준화(서로 단위가 다른 차원을 공정하게 비교)
+function zscore(X){
+  const n=X.length, d=X[0].length, mean=new Array(d).fill(0), std=new Array(d).fill(0);
+  for(let i=0;i<n;i++) for(let j=0;j<d;j++) mean[j]+=X[i][j];
+  for(let j=0;j<d;j++) mean[j]/=n;
+  for(let i=0;i<n;i++) for(let j=0;j<d;j++){ const dv=X[i][j]-mean[j]; std[j]+=dv*dv; }
+  for(let j=0;j<d;j++) std[j]=Math.sqrt(std[j]/Math.max(n,1))||1;
+  return X.map(row=>row.map((v,j)=>(v-mean[j])/std[j]));
+}
+function kmeans(X, K, iters=50){
+  const n=X.length, d=X[0].length;
+  let seed=20260612; const rnd=()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
+  const dist2=(a,b)=>{ let s=0; for(let j=0;j<d;j++){ const dv=a[j]-b[j]; s+=dv*dv; } return s; };
+  // k-means++ 초기화
+  const cent=[X[Math.floor(rnd()*n)].slice()], D=new Array(n).fill(Infinity);
+  for(let c=1;c<K;c++){
+    let sumD=0;
+    for(let i=0;i<n;i++){ const dd=dist2(X[i],cent[c-1]); if(dd<D[i])D[i]=dd; sumD+=D[i]; }
+    let t=rnd()*sumD, idx=0;
+    for(let i=0;i<n;i++){ t-=D[i]; if(t<=0){ idx=i; break; } }
+    cent.push(X[idx].slice());
+  }
+  const assign=new Array(n).fill(0);
+  for(let it=0;it<iters;it++){
+    let changed=false;
+    for(let i=0;i<n;i++){ let best=0,bd=Infinity;
+      for(let c=0;c<K;c++){ const dd=dist2(X[i],cent[c]); if(dd<bd){bd=dd;best=c;} }
+      if(assign[i]!==best){ assign[i]=best; changed=true; } }
+    const sums=Array.from({length:K},()=>new Array(d).fill(0)), cnt=new Array(K).fill(0);
+    for(let i=0;i<n;i++){ cnt[assign[i]]++; const s=sums[assign[i]]; for(let j=0;j<d;j++)s[j]+=X[i][j]; }
+    for(let c=0;c<K;c++){ if(cnt[c]) for(let j=0;j<d;j++) cent[c][j]=sums[c][j]/cnt[c]; }
+    if(!changed && it>0) break;
+  }
+  return {assign, cent};
+}
+// 거듭제곱 반복으로 상위 2개 주성분에 투영 (2D 시각화)
+function pca2(X){
+  const n=X.length, d=X[0].length, mean=new Array(d).fill(0);
+  for(let i=0;i<n;i++) for(let j=0;j<d;j++) mean[j]+=X[i][j];
+  for(let j=0;j<d;j++) mean[j]/=n;
+  const C=X.map(r=>r.map((v,j)=>v-mean[j]));
+  let seed=777; const rnd=()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
+  const norm=v=>{ let s=0; for(const x of v)s+=x*x; return Math.sqrt(s)||1; };
+  function topComp(M){
+    let v=new Array(d).fill(0).map(()=>rnd()-0.5); let nv=norm(v); v=v.map(x=>x/nv);
+    for(let it=0;it<40;it++){
+      const u=new Array(n);
+      for(let i=0;i<n;i++){ let s=0; const row=M[i]; for(let j=0;j<d;j++)s+=row[j]*v[j]; u[i]=s; }
+      const w=new Array(d).fill(0);
+      for(let i=0;i<n;i++){ const ui=u[i], row=M[i]; for(let j=0;j<d;j++)w[j]+=row[j]*ui; }
+      const nw=norm(w); v=w.map(x=>x/nw);
+    }
+    return v;
+  }
+  const v1=topComp(C);
+  for(let i=0;i<n;i++){ const row=C[i]; let s=0; for(let j=0;j<d;j++)s+=row[j]*v1[j]; for(let j=0;j<d;j++)row[j]-=s*v1[j]; }
+  const v2=topComp(C);
+  return X.map(r=>{ let a=0,b=0; for(let j=0;j<d;j++){ const cv=r[j]-mean[j]; a+=cv*v1[j]; b+=cv*v2[j]; } return [a,b]; });
+}
+
+function clusterTab(){
+  const scope=document.getElementById('cluScope').value;
+  const mode=document.getElementById('cluMode').value;
+  const K=+document.getElementById('cluK').value;
+  const includeSize=document.getElementById('cluSize').checked;
+  const note=document.getElementById('cluNote2');
+  const rows=(scope==='전국') ? LEAF.map(L=>L.row) : LEAF.map(L=>L.row).filter(r=>r.sido===scope);
+  if(rows.length<K){
+    note.textContent=`이 범위의 동네가 ${rows.length}개뿐이라 K=${K} 군집을 만들 수 없어요. 범위를 넓히거나 K를 줄여 보세요.`;
+    note.style.color='#E45756';
+    ['cluScatter','cluProfile','cluMap'].forEach(id=>Plotly.purge(id));
+    document.getElementById('cluBody').innerHTML=''; return;
+  }
+  note.style.color=''; note.textContent='계산 중이에요… ⏳';
+  // 무거운 계산은 화면이 갱신된 뒤 실행
+  setTimeout(()=>{
+    const dimTxt = mode==='sexage' ? '성별·연령별 202차원' : '연령별 101차원';
+    const X=zscore(cluFeatures(rows, mode, includeSize));
+    const {assign}=kmeans(X, K);
+    const P=pca2(X);
+    const st=rows.map(stats);
+    cluScatterPlot(P, assign, K, rows, st);
+    cluProfilePlot(assign, K, rows);
+    cluTable(assign, K, rows, st, X);
+    cluMap(assign, K, rows);
+    note.textContent=`${scope} 읍·면·동 ${rows.length.toLocaleString()}개를 ${dimTxt}`+
+      `${includeSize?' + 인구 규모':''} 기준으로 ${K}개 군집으로 나눴어요.`;
+    cluDirty=false;
+  }, 30);
+}
+function cluScatterPlot(P, assign, K, rows, st){
+  const traces=[];
+  for(let c=0;c<K;c++){
+    const xs=[],ys=[],tx=[];
+    for(let i=0;i<P.length;i++) if(assign[i]===c){
+      xs.push(P[i][0]); ys.push(P[i][1]);
+      tx.push(rows[i].name+'<br>총인구 '+fmtPop(st[i].total)+' · 평균 '+st[i].mean.toFixed(1)+'세');
+    }
+    traces.push({type:'scattergl',mode:'markers',name:`군집 ${c+1} (${xs.length})`,
+      x:xs,y:ys,text:tx,hoverinfo:'text',marker:{size:6,color:CLU_COLORS[c%8],opacity:.72}});
+  }
+  Plotly.react('cluScatter',traces,{height:480,font:FONT,margin:{l:50,r:20,t:34,b:46},
+    legend:{orientation:'h',y:1.12},xaxis:{title:'주성분 1 (PC1)',zeroline:false},
+    yaxis:{title:'주성분 2 (PC2)',zeroline:false},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
+}
+function cluProfilePlot(assign, K, rows){
+  const traces=[];
+  for(let c=0;c<K;c++){
+    const acc=new Array(101).fill(0); let cnt=0;
+    for(let i=0;i<rows.length;i++) if(assign[i]===c){
+      const r=rows[i], t=AGES.map(a=>r.male[a]+r.female[a]), s=Math.max(sum(t),1);
+      for(let a=0;a<=100;a++) acc[a]+=t[a]/s; cnt++;
+    }
+    if(!cnt) continue;
+    traces.push({type:'scatter',mode:'lines',x:AGES,y:acc.map(v=>v/cnt*100),
+      name:`군집 ${c+1}`,line:{color:CLU_COLORS[c%8],width:2}});
+  }
+  Plotly.react('cluProfile',traces,{height:360,font:FONT,margin:{l:55,r:20,t:30,b:46},
+    legend:{orientation:'h',y:1.16},xaxis:{title:'나이(세)'},yaxis:{title:'평균 연령 비율(%)'},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
+}
+function cluTable(assign, K, rows, st, X){
+  // 군집 중심(표준화 공간)과 가장 가까운 동네 = 대표 동네
+  const d=X[0].length, sums=Array.from({length:K},()=>new Array(d).fill(0)), cnt=new Array(K).fill(0);
+  for(let i=0;i<rows.length;i++){ cnt[assign[i]]++; const s=sums[assign[i]]; for(let j=0;j<d;j++)s[j]+=X[i][j]; }
+  const cent=sums.map((s,c)=> cnt[c]?s.map(v=>v/cnt[c]):s);
+  const rep=new Array(K).fill(-1), repd=new Array(K).fill(Infinity);
+  for(let i=0;i<rows.length;i++){ const c=assign[i]; let dd=0; const row=X[i];
+    for(let j=0;j<d;j++){ const dv=row[j]-cent[c][j]; dd+=dv*dv; }
+    if(dd<repd[c]){ repd[c]=dd; rep[c]=i; } }
+  const tb=document.getElementById('cluBody'); tb.innerHTML='';
+  for(let c=0;c<K;c++){
+    if(!cnt[c]) continue;
+    let mean=0,total=0,ext=0;
+    for(let i=0;i<rows.length;i++) if(assign[i]===c){ mean+=st[i].mean; total+=st[i].total; ext+=st[i].ext; }
+    mean/=cnt[c]; total/=cnt[c]; ext/=cnt[c];
+    tb.insertAdjacentHTML('beforeend',
+      `<tr><td><span class="chip" style="background:${CLU_COLORS[c%8]}22;color:${CLU_COLORS[c%8]}">군집 ${c+1}</span></td>`+
+      `<td class="n">${cnt[c].toLocaleString()}개</td><td class="n">${mean.toFixed(1)}세</td>`+
+      `<td class="n">${fmtPop(total)}</td><td class="n">${ext.toFixed(2)}</td>`+
+      `<td>${rep[c]>=0?rows[rep[c]].name:'–'}</td></tr>`);
+  }
+}
+function cluMap(assign, K, rows){
+  if(!CENT.size){ Plotly.purge('cluMap'); return; }
+  const traces=[]; const la=[],lo=[];
+  for(let c=0;c<K;c++){
+    const lat=[],lon=[],tx=[];
+    for(let i=0;i<rows.length;i++) if(assign[i]===c){
+      const r=rows[i]; if(r.code && CENT.has(r.code)){ const ce=CENT.get(r.code);
+        lat.push(ce.lat); lon.push(ce.lon); tx.push(r.name); la.push(ce.lat); lo.push(ce.lon); }
+    }
+    if(!lat.length) continue;
+    traces.push({type:'scattermapbox',mode:'markers',name:`군집 ${c+1}`,
+      lat,lon,hovertext:tx,hoverinfo:'text',marker:{size:8,opacity:.8,color:CLU_COLORS[c%8]}});
+  }
+  if(!la.length){ Plotly.purge('cluMap'); return; }
+  const scope=document.getElementById('cluScope').value;
+  Plotly.newPlot('cluMap',traces,{margin:{l:0,r:0,t:0,b:0},font:FONT,
+    legend:{orientation:'h',y:1.0,x:0,bgcolor:'rgba(255,255,255,.7)'},
+    mapbox:{style:'carto-positron',
+      center:{lat:la.reduce((a,b)=>a+b,0)/la.length, lon:lo.reduce((a,b)=>a+b,0)/lo.length},
+      zoom:scope==='전국'?5.5:9}},{responsive:true,displayModeBar:false});
+}
+
 function render(){
   const row=byName(document.getElementById('town').value);
   if(!row) return;
@@ -479,6 +697,9 @@ function initData(rows){
   });
   const sidos=['전국', ...SIDO_ORDER.filter(s=>rows.some(r=>r.sido===s))];
   document.getElementById('sido').innerHTML=sidos.map(s=>`<option>${s}</option>`).join('');
+  const cluS=document.getElementById('cluScope');
+  if(cluS) cluS.innerHTML=sidos.map(s=>`<option ${s==='전국'?'selected':''}>${s}</option>`).join('');
+  cluDirty=true;
   fillTowns();
 }
 function wire(){
@@ -492,7 +713,10 @@ function wire(){
     t.classList.add('on'); document.getElementById('p_'+t.dataset.p).classList.add('on');
     window.dispatchEvent(new Event('resize'));   // 숨겨졌던 그래프 리사이즈
     if(t.dataset.p==='map') mapView();
+    if(t.dataset.p==='clu' && cluDirty) clusterTab();
   }));
+  ['cluScope','cluMode','cluK','cluSize'].forEach(id=>
+    document.getElementById(id).addEventListener('change',clusterTab));
   document.querySelectorAll('input[name=mapmetric]').forEach(r=>r.addEventListener('change',mapView));
   document.getElementById('file').addEventListener('change',ev=>{
     const f=ev.target.files[0]; if(!f) return;
