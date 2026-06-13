@@ -10,3 +10,10 @@
 - 라이브: https://greatsong.github.io/modeudata-population-web/
 - 데이터: 행정안전부 연령별 인구현황(2026.5)
 - 그래프: Plotly.js (클라이언트 사이드, 서버 불필요)
+
+## 📚 입문 교재 — 바이브 코딩으로 데이터 분석 → 머신러닝
+
+**코드 한 줄 안 쓰고, AI에게 시켜서** 이 웹앱을 단계별로 만들어 가는 HTML 입문 교재를 [`docs/`](docs/)에 담았습니다.
+pandas·numpy·설치 없이, 복사 버튼이 달린 프롬프트 박스와 시각적 다이어그램으로 실습합니다.
+
+→ **[교재 열기](https://greatsong.github.io/modeudata-population-web/docs/)** (0~10장 + 프롬프트 사전·개념 사전·데이터 안내)
