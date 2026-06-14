@@ -159,7 +159,8 @@
         <div class="f1"><label>군집 수 K</label>
           <select id="cluK">
             <option>2</option><option>3</option><option selected>4</option><option>5</option>
-            <option>6</option><option>7</option><option>8</option>
+            <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+            <option>11</option><option>12</option><option>13</option><option>14</option><option>15</option>
           </select></div>
         <div class="f1"><label>&nbsp;</label>
           <label style="font-weight:600;color:var(--text)"><input type="checkbox" id="cluSize"> 인구 규모도 차원에 반영</label></div>
@@ -533,7 +534,7 @@ function clusterTab(){
   }, 30);
 }
 function cluElbowPlot(X, curK){
-  const ks=[2,3,4,5,6,7,8];
+  const ks=[2,3,4,5,6,7,8,9,10,11,12,13,14,15];
   const inert=ks.map(k=>kmeans(X, k, 25).inertia);
   const ci=ks.indexOf(curK);
   const data=[

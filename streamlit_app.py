@@ -331,7 +331,7 @@ with tab_clu:
     g1, g2, g3, g4 = st.columns(4)
     cscope = g1.selectbox("대상 범위", sidos, index=0, key="cscope")
     cmode = g2.selectbox("차원(특징)", ["연령별 (101차원)", "성별·연령별 (202차원)"], key="cmode")
-    cK = g3.slider("군집 수 K", 2, 8, 4)
+    cK = g3.slider("군집 수 K", 2, 15, 4)
     csize = g4.checkbox("인구 규모도 반영", value=False)
 
     pool = df[df["행정구역"].str.endswith(("동", "읍", "면"))]
@@ -364,7 +364,7 @@ with tab_clu:
                    f"기준으로 {cK}개 군집으로 나눴어요.")
 
         # 엘보우 방법 — 적당한 K 찾기
-        ks = list(range(2, 11))
+        ks = list(range(2, 16))
         with st.spinner("엘보우 계산 중…"):
             inertias = [KMeans(n_clusters=k, n_init=5, random_state=42).fit(Xs).inertia_ for k in ks]
         efig = go.Figure()
