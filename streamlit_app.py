@@ -155,7 +155,7 @@ def row_ages(row):
 # 사이드바
 # ──────────────────────────────────────────────────────────────────────────
 st.sidebar.title("🏘️ 우리 동네 인구 구조")
-st.sidebar.caption("『모두의 데이터 분석 with AI』 · Streamlit 판")
+st.sidebar.caption("우리 동네 인구 구조 · Streamlit 판")
 
 up = st.sidebar.file_uploader(
     "📂 다른 달 CSV 올리기 (행정안전부 연령별 인구현황)", type="csv"
@@ -464,4 +464,4 @@ with tab_map:
         st.caption(f"점 하나가 읍·면·동({len(pool):,}개)이에요. 색이 진할수록 값이 높아요.")
 
 st.markdown("---")
-st.caption("데이터: 2026년 5월 행정안전부 주민등록 인구현황 · 모두의 데이터 분석 with AI · Streamlit 판")
+st.caption("데이터: 2026년 5월 행정안전부 주민등록 인구현황 · Streamlit 판")
