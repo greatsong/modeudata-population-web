@@ -363,6 +363,24 @@ with tab_clu:
         st.success(f"{cscope} 읍·면·동 {len(pool):,}개를 {dim_txt}{' + 인구 규모' if csize else ''} "
                    f"기준으로 {cK}개 군집으로 나눴어요.")
 
+        # 엘보우 방법 — 적당한 K 찾기
+        ks = list(range(2, 11))
+        with st.spinner("엘보우 계산 중…"):
+            inertias = [KMeans(n_clusters=k, n_init=5, random_state=42).fit(Xs).inertia_ for k in ks]
+        efig = go.Figure()
+        efig.add_scatter(x=ks, y=inertias, mode="lines+markers",
+                         line=dict(color=ACCENT, width=2), marker=dict(size=8, color=ACCENT),
+                         hovertemplate="K=%{x} · 관성 %{y:,.0f}<extra></extra>")
+        efig.add_scatter(x=[cK], y=[inertias[ks.index(cK)]], mode="markers",
+                         marker=dict(size=15, color="#E45756", line=dict(color="#fff", width=2)),
+                         hovertemplate="지금 K=%{x}<extra></extra>", showlegend=False)
+        efig.update_layout(height=300, margin=dict(l=60, r=20, t=20, b=42), showlegend=False,
+                           xaxis=dict(title="군집 수 K", dtick=1), yaxis_title="관성(inertia)")
+        st.subheader("📐 군집 수 정하기 (엘보우 방법)")
+        st.plotly_chart(efig, use_container_width=True)
+        st.caption("K를 늘릴수록 군집은 빽빽해지지만(관성↓), 어느 지점부터 거의 안 줄어요. "
+                   "‘팔꿈치’처럼 꺾이는 K가 적당해요. 빨간 점이 지금 고른 K예요.")
+
         # 산점도
         sfig = go.Figure()
         for c in range(cK):

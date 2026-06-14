@@ -165,6 +165,9 @@
           <label style="font-weight:600;color:var(--text)"><input type="checkbox" id="cluSize"> 인구 규모도 차원에 반영</label></div>
       </div>
       <div id="cluNote2" class="sub" style="margin:0 0 6px"></div>
+      <h4 style="margin:1.1rem 0 .3rem;font-weight:800">📐 군집 수 정하기 (엘보우 방법)</h4>
+      <div id="cluElbow"></div>
+      <p class="sub">K를 늘릴수록 군집은 빽빽해지지만(관성↓), 어느 지점부터 거의 안 줄어요. 그래프가 ‘팔꿈치’처럼 꺾이는 K가 적당해요. 빨간 점이 지금 고른 K예요.</p>
       <div id="cluScatter"></div>
       <p class="sub">점 하나가 동네예요. 색이 같으면 인구 구조가 닮은 ‘같은 군집’이에요. 마우스를 올리면 동네 이름·총인구·평균연령이 보여요.</p>
       <h4 style="margin:1.4rem 0 .3rem;font-weight:800">📈 군집별 평균 연령 분포</h4>
@@ -470,7 +473,8 @@ function kmeans(X, K, iters=50){
     for(let c=0;c<K;c++){ if(cnt[c]) for(let j=0;j<d;j++) cent[c][j]=sums[c][j]/cnt[c]; }
     if(!changed && it>0) break;
   }
-  return {assign, cent};
+  let inertia=0; for(let i=0;i<n;i++) inertia+=dist2(X[i],cent[assign[i]]);
+  return {assign, cent, inertia};
 }
 // 거듭제곱 반복으로 상위 2개 주성분에 투영 (2D 시각화)
 function pca2(X){
@@ -507,7 +511,7 @@ function clusterTab(){
   if(rows.length<K){
     note.textContent=`이 범위의 동네가 ${rows.length}개뿐이라 K=${K} 군집을 만들 수 없어요. 범위를 넓히거나 K를 줄여 보세요.`;
     note.style.color='#E45756';
-    ['cluScatter','cluProfile','cluMap'].forEach(id=>Plotly.purge(id));
+    ['cluElbow','cluScatter','cluProfile','cluMap'].forEach(id=>Plotly.purge(id));
     document.getElementById('cluBody').innerHTML=''; return;
   }
   note.style.color=''; note.textContent='계산 중이에요… ⏳';
@@ -518,6 +522,7 @@ function clusterTab(){
     const {assign}=kmeans(X, K);
     const P=pca2(X);
     const st=rows.map(stats);
+    cluElbowPlot(X, K);
     cluScatterPlot(P, assign, K, rows, st);
     cluProfilePlot(assign, K, rows);
     cluTable(assign, K, rows, st, X);
@@ -526,6 +531,20 @@ function clusterTab(){
       `${includeSize?' + 인구 규모':''} 기준으로 ${K}개 군집으로 나눴어요.`;
     cluDirty=false;
   }, 30);
+}
+function cluElbowPlot(X, curK){
+  const ks=[2,3,4,5,6,7,8];
+  const inert=ks.map(k=>kmeans(X, k, 25).inertia);
+  const ci=ks.indexOf(curK);
+  const data=[
+    {type:'scatter',mode:'lines+markers',x:ks,y:inert,line:{color:'#E8930C',width:2},
+     marker:{size:8,color:'#E8930C'},hovertemplate:'K=%{x} · 관성 %{y:,.0f}<extra></extra>',showlegend:false},
+    {type:'scatter',mode:'markers',x:[curK],y:[ci>=0?inert[ci]:null],
+     marker:{size:15,color:'#E45756',line:{color:'#fff',width:2}},
+     name:'지금 고른 K',hovertemplate:'지금 K=%{x}<extra></extra>',showlegend:false}];
+  Plotly.react('cluElbow',data,{height:300,font:FONT,margin:{l:60,r:20,t:20,b:42},
+    xaxis:{title:'군집 수 K',dtick:1},yaxis:{title:'관성(inertia)',rangemode:'tozero'},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},PLOT);
 }
 function cluScatterPlot(P, assign, K, rows, st){
   const traces=[];
