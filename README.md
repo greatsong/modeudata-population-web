@@ -17,3 +17,17 @@
 pandas·numpy·설치 없이, 복사 버튼이 달린 프롬프트 박스와 시각적 다이어그램으로 실습합니다.
 
 → **[교재 열기](https://greatsong.github.io/modeudata-population-web/docs/)** (0~10장 + 프롬프트 사전·개념 사전·데이터 안내)
+
+## 🐍 Streamlit 판 (파이썬 앱)
+
+같은 분석(피라미드·연령분포·동네비교·쌍둥이·**군집 분석**·지도)을 **파이썬 Streamlit** 앱으로도 구현했습니다.
+pandas·scikit-learn(KMeans·PCA)·Plotly를 사용합니다.
+
+- 앱 코드: [`streamlit_app.py`](streamlit_app.py) · 의존성: [`requirements.txt`](requirements.txt)
+- **로컬 실행:** `pip install -r requirements.txt` 후 `streamlit run streamlit_app.py`
+- **무료 배포 (Streamlit Community Cloud):**
+  1. https://share.streamlit.io 접속 → GitHub 계정으로 로그인
+  2. **New app** → 저장소 `greatsong/modeudata-population-web`, 브랜치 `main`, 메인 파일 `streamlit_app.py` 선택
+  3. **Deploy** → 잠시 뒤 `https://<앱이름>.streamlit.app` 주소가 생성됩니다.
+
+> GitHub Pages(정적 HTML)와 달리 Streamlit은 파이썬 서버가 필요해 Streamlit Cloud/서버에서 호스팅합니다.
