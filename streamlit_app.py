@@ -325,6 +325,40 @@ with tab_twin:
         st.info("읍·면·동을 선택하면 쌍둥이 동네를 찾아 줘요. (현재 선택은 시도/시군구 단위예요)")
 
 # ── 군집 분석 (K-평균 + PCA) ──
+# st.tabs는 화면만 나눌 뿐 매 상호작용마다 모든 탭 코드가 다시 실행되므로,
+# 무거운 계산(표준화·KMeans·PCA·엘보우)은 전부 캐시에 얹는다.
+@st.cache_data(show_spinner=False)
+def cluster_matrix(src_name, cscope, cmode, csize):
+    pool = df[df["행정구역"].str.endswith(("동", "읍", "면"))]
+    if cscope != "전국":
+        pool = pool[pool["sido"] == cscope]
+    pool = pool.reset_index(drop=True)
+    M = pool[MALE_COLS].to_numpy(float)
+    F = pool[FEMALE_COLS].to_numpy(float)
+    tot = (M + F).sum(1, keepdims=True)
+    if cmode.startswith("성별"):
+        X = np.hstack([M / np.clip(tot, 1, None), F / np.clip(tot, 1, None)])
+    else:
+        X = (M + F) / np.clip(tot, 1, None)
+    if csize:
+        X = np.hstack([X, np.log10(tot + 1)])
+    Xs = StandardScaler().fit_transform(X)
+    P = PCA(n_components=2, random_state=42).fit_transform(Xs)
+    return pool, Xs, P
+
+
+@st.cache_data(show_spinner="군집화 계산 중…")
+def cluster_labels(src_name, cscope, cmode, csize, cK):
+    _, Xs, _ = cluster_matrix(src_name, cscope, cmode, csize)
+    return KMeans(n_clusters=cK, n_init=10, random_state=42).fit_predict(Xs)
+
+
+@st.cache_data(show_spinner="엘보우 계산 중…")
+def elbow_inertias(src_name, cscope, cmode, csize, ks):
+    _, Xs, _ = cluster_matrix(src_name, cscope, cmode, csize)
+    return [KMeans(n_clusters=k, n_init=5, random_state=42).fit(Xs).inertia_ for k in ks]
+
+
 with tab_clu:
     st.caption("동네(읍·면·동)를 인구 구조의 모양으로 비슷한 것끼리 묶어요(K-평균). "
                "연령별(101차원)·성별×연령별(202차원) 중 고르고, 인구 규모까지 반영할 수 있어요.")
@@ -334,39 +368,21 @@ with tab_clu:
     cK = g3.slider("군집 수 K", 2, 15, 4)
     csize = g4.checkbox("인구 규모도 반영", value=False)
 
-    pool = df[df["행정구역"].str.endswith(("동", "읍", "면"))]
-    if cscope != "전국":
-        pool = pool[pool["sido"] == cscope]
-    pool = pool.reset_index(drop=True)
+    pool, Xs, P = cluster_matrix(src_name, cscope, cmode, csize)
 
     if len(pool) < cK:
         st.warning(f"이 범위의 동네가 {len(pool)}개뿐이라 K={cK} 군집을 만들 수 없어요. 범위를 넓히거나 K를 줄여 보세요.")
     else:
-        M = pool[MALE_COLS].to_numpy(float)
-        F = pool[FEMALE_COLS].to_numpy(float)
-        tot = (M + F).sum(1, keepdims=True)
-        if cmode.startswith("성별"):
-            X = np.hstack([M / np.clip(tot, 1, None), F / np.clip(tot, 1, None)])
-        else:
-            T = M + F
-            X = T / np.clip(tot, 1, None)
-        if csize:
-            X = np.hstack([X, np.log10(tot + 1)])
-
-        with st.spinner("군집화 계산 중…"):
-            Xs = StandardScaler().fit_transform(X)
-            labels = KMeans(n_clusters=cK, n_init=10, random_state=42).fit_predict(Xs)
-            P = PCA(n_components=2, random_state=42).fit_transform(Xs)
+        labels = cluster_labels(src_name, cscope, cmode, csize, cK)
         pool = pool.assign(군집=labels, PC1=P[:, 0], PC2=P[:, 1])
 
         dim_txt = "성별·연령별 202차원" if cmode.startswith("성별") else "연령별 101차원"
         st.success(f"{cscope} 읍·면·동 {len(pool):,}개를 {dim_txt}{' + 인구 규모' if csize else ''} "
                    f"기준으로 {cK}개 군집으로 나눴어요.")
 
-        # 엘보우 방법 — 적당한 K 찾기
+        # 엘보우 방법 — 적당한 K 찾기 (K와 무관하므로 슬라이더를 움직여도 재계산 없음)
         ks = list(range(2, 16))
-        with st.spinner("엘보우 계산 중…"):
-            inertias = [KMeans(n_clusters=k, n_init=5, random_state=42).fit(Xs).inertia_ for k in ks]
+        inertias = elbow_inertias(src_name, cscope, cmode, csize, tuple(ks))
         efig = go.Figure()
         efig.add_scatter(x=ks, y=inertias, mode="lines+markers",
                          line=dict(color=ACCENT, width=2), marker=dict(size=8, color=ACCENT),
