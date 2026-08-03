@@ -1,0 +1,9 @@
+# 파이썬
+__pycache__/
+*.py[cod]
+
+# 도구가 만드는 로컬 산출물
+.gstack/
+
+# macOS
+.DS_Store
