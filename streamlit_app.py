@@ -42,6 +42,28 @@ def _read_csv_any(src):
     raise last
 
 
+class PopulationFormatError(Exception):
+    """행정안전부 연령별 인구현황 형식으로 읽을 수 없는 CSV."""
+
+
+def _age_col_map(columns):
+    """행안부 원본(2026년06월_남_0세)을 내부 형식(남자_0세)으로 바꾸는 매핑을 만든다.
+
+    내부 형식으로 이미 저장된 파일(남자_0세…)은 그대로 두고, 원본을 올렸을 때만 맞춰 준다.
+    """
+    cols = list(columns)
+    mapping = {}
+    for std_cols, sg in ((MALE_COLS, "남"), (FEMALE_COLS, "여")):
+        for a, want in enumerate(std_cols):
+            if want in cols:
+                continue
+            sufs = (f"_{sg}_{a}세",) if a < 100 else (f"_{sg}_100세 이상", f"_{sg}_100세이상")
+            hit = next((c for c in cols if c.endswith(sufs)), None)
+            if hit is not None:
+                mapping[hit] = want
+    return mapping
+
+
 def _sido_of(name: str):
     if name == "대한민국 전체":
         return "전국"
@@ -57,13 +79,30 @@ def load_population(file_bytes=None, file_name="기본 데이터"):
     df = _read_csv_any(src)
     df.columns = [c.replace("﻿", "").strip() for c in df.columns]
 
-    # 인구 열을 숫자로
+    if "행정구역" not in df.columns:
+        raise PopulationFormatError(
+            "‘행정구역’ 열이 없어요. 행정안전부 ‘연령별 인구현황(월간)’ CSV가 맞는지 확인해 주세요."
+        )
+
+    # 행안부 원본 열 이름(2026년06월_남_0세)을 내부 형식(남자_0세)으로 맞춘다
+    df = df.rename(columns=_age_col_map(df.columns))
+    if not any(c in df.columns for c in MALE_COLS + FEMALE_COLS):
+        raise PopulationFormatError(
+            "연령별 인구 열(남자_0세… 또는 2026년○○월_남_0세…)을 찾지 못했어요. "
+            "행정안전부에서 내려받을 때 ‘남/여 구분’을 포함했는지 확인해 주세요. "
+            "‘계’만 있는 파일은 성별 분석을 할 수 없어요."
+        )
+
+    # 인구 열을 숫자로 — 원본은 "47,447"처럼 천 단위 콤마가 들어 있다(dtype=str이라 직접 제거)
     for c in MALE_COLS + FEMALE_COLS:
         if c not in df.columns:
             df[c] = 0
-        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
+        s = df[c].astype(str).str.replace(",", "", regex=False)
+        df[c] = pd.to_numeric(s, errors="coerce").fillna(0).astype(int)
 
     # 행정구역 이름 정리 (괄호 코드 제거) · 코드 컬럼
+    # 원본에는 코드 열이 따로 없고 이름 뒤 괄호에 들어 있다 — 지도용으로 꺼내 둔다
+    paren_code = df["행정구역"].astype(str).str.extract(r"\((\d+)\)\s*$")[0]
     df["행정구역"] = (
         df["행정구역"].astype(str)
         .str.replace(r"\s*\(\d+\)\s*$", "", regex=True)
@@ -72,7 +111,7 @@ def load_population(file_bytes=None, file_name="기본 데이터"):
     if "코드" in df.columns:
         df["코드"] = df["코드"].astype(str).str.strip()
     else:
-        df["코드"] = ""
+        df["코드"] = paren_code.fillna("")
 
     # 중복 · 비표준 행 제거
     df = df.drop_duplicates(subset="행정구역").reset_index(drop=True)
@@ -161,8 +200,13 @@ up = st.sidebar.file_uploader(
     "📂 다른 달 CSV 올리기 (행정안전부 연령별 인구현황)", type="csv"
 )
 if up is not None:
-    df, src_name = load_population(up.getvalue(), up.name)
-    st.sidebar.success(f"업로드: {src_name}")
+    try:
+        df, src_name = load_population(up.getvalue(), up.name)
+        st.sidebar.success(f"업로드: {src_name}")
+    except PopulationFormatError as e:
+        st.sidebar.error(f"올린 파일을 읽지 못했어요.\n\n{e}")
+        st.sidebar.info("기본 데이터로 계속 보여 드릴게요.")
+        df, src_name = load_population()
 else:
     df, src_name = load_population()
 
@@ -376,6 +420,12 @@ with tab_clu:
         labels = cluster_labels(src_name, cscope, cmode, csize, cK)
         pool = pool.assign(군집=labels, PC1=P[:, 0], PC2=P[:, 1])
 
+        # 인구 구조가 똑같은 동네가 많으면 KMeans가 K개보다 적은 군집만 만든다(빈 군집 발생)
+        n_found = len(np.unique(labels))
+        if n_found < cK:
+            st.warning(f"인구 구조가 서로 똑같은 동네가 많아 실제로는 {n_found}개 군집만 만들어졌어요. "
+                       f"K를 줄이거나 데이터를 확인해 보세요.")
+
         dim_txt = "성별·연령별 202차원" if cmode.startswith("성별") else "연령별 101차원"
         st.success(f"{cscope} 읍·면·동 {len(pool):,}개를 {dim_txt}{' + 인구 규모' if csize else ''} "
                    f"기준으로 {cK}개 군집으로 나눴어요.")
@@ -416,6 +466,8 @@ with tab_clu:
         pfig = go.Figure()
         for c in range(cK):
             sub = pool[pool["군집"] == c]
+            if not len(sub):
+                continue
             T = sub[MALE_COLS].to_numpy(float) + sub[FEMALE_COLS].to_numpy(float)
             prof = (T / np.clip(T.sum(1, keepdims=True), 1, None)).mean(0) * 100
             pfig.add_scatter(x=AGES, y=prof, mode="lines", name=f"군집 {c+1}",
@@ -430,6 +482,8 @@ with tab_clu:
         rows = []
         for c in range(cK):
             idx = np.where(labels == c)[0]
+            if not len(idx):        # 빈 군집은 건너뛴다
+                continue
             center = Xs[idx].mean(0)
             rep = idx[np.argmin(((Xs[idx] - center) ** 2).sum(1))]
             sub = pool.iloc[idx]
