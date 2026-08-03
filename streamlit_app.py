@@ -1,4 +1,5 @@
 import io
+import re
 
 import numpy as np
 import pandas as pd
@@ -64,6 +65,18 @@ def _age_col_map(columns):
     return mapping
 
 
+def _period_label(raw_columns, file_name):
+    """데이터 기준 연월(‘2026년 6월’)을 뽑는다 — 열 이름 우선, 없으면 파일명. 못 찾으면 None."""
+    for c in raw_columns:
+        m = re.search(r"(\d{4})년\s*(\d{1,2})월", str(c))
+        if m:
+            return f"{int(m.group(1))}년 {int(m.group(2))}월"
+    m = re.search(r"(20\d{2})[_\-.]?(0[1-9]|1[0-2])", str(file_name))
+    if m:
+        return f"{int(m.group(1))}년 {int(m.group(2))}월"
+    return None
+
+
 def _sido_of(name: str):
     if name == "대한민국 전체":
         return "전국"
@@ -75,9 +88,13 @@ def _sido_of(name: str):
 
 @st.cache_data(show_spinner="데이터를 불러오는 중이에요…")
 def load_population(file_bytes=None, file_name="기본 데이터"):
-    src = io.BytesIO(file_bytes) if file_bytes is not None else "population_2026_05.csv"
+    default_path = "population_2026_05.csv"
+    src = io.BytesIO(file_bytes) if file_bytes is not None else default_path
     df = _read_csv_any(src)
     df.columns = [c.replace("﻿", "").strip() for c in df.columns]
+
+    # 기준 연월은 열 이름을 바꾸기 전에 뽑는다(원본 열에 ‘2026년06월’이 들어 있다)
+    period = _period_label(df.columns, file_name if file_bytes is not None else default_path)
 
     if "행정구역" not in df.columns:
         raise PopulationFormatError(
@@ -127,7 +144,7 @@ def load_population(file_bytes=None, file_name="기본 데이터"):
     df = pd.concat([pd.DataFrame([total_row]), df], ignore_index=True)
 
     df = _add_metrics(df)
-    return df, file_name
+    return df, file_name, period
 
 
 def _add_metrics(df):
@@ -201,14 +218,17 @@ up = st.sidebar.file_uploader(
 )
 if up is not None:
     try:
-        df, src_name = load_population(up.getvalue(), up.name)
+        df, src_name, period = load_population(up.getvalue(), up.name)
         st.sidebar.success(f"업로드: {src_name}")
     except PopulationFormatError as e:
         st.sidebar.error(f"올린 파일을 읽지 못했어요.\n\n{e}")
         st.sidebar.info("기본 데이터로 계속 보여 드릴게요.")
-        df, src_name = load_population()
+        df, src_name, period = load_population()
 else:
-    df, src_name = load_population()
+    df, src_name, period = load_population()
+
+# 사이드바·푸터에 쓸 데이터 기준 시점 (업로드한 달에 맞춰 바뀐다)
+data_txt = f"{period} 행정안전부 주민등록 인구현황" if period else "행정안전부 주민등록 인구현황"
 
 CENT = load_centroids()
 
@@ -218,7 +238,7 @@ town_list = df[df["sido"] == sido]["행정구역"].tolist()
 town = st.sidebar.selectbox("행정구역 (시군구·동)", town_list, index=0 if town_list else None)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("데이터: 2026년 5월 행정안전부 주민등록 인구현황 · 그래프: Plotly")
+st.sidebar.caption(f"데이터: {data_txt} · 그래프: Plotly")
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -552,4 +572,4 @@ with tab_map:
         st.caption(f"점 하나가 읍·면·동({len(pool):,}개)이에요. 색이 진할수록 값이 높아요.")
 
 st.markdown("---")
-st.caption("데이터: 2026년 5월 행정안전부 주민등록 인구현황 · Streamlit 판")
+st.caption(f"데이터: {data_txt} · Streamlit 판")
