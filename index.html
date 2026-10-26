@@ -394,7 +394,7 @@ function twinMap(row, scored){
   Plotly.newPlot('twinMap',traces,{margin:{l:0,r:0,t:0,b:0},font:FONT,
     mapbox:{style:'open-street-map',
       center:{lat:la.reduce((a,b)=>a+b,0)/la.length, lon:lo.reduce((a,b)=>a+b,0)/lo.length}, zoom}},
-    {responsive:true,displayModeBar:false});
+    {responsive:true,displayModeBar:false,scrollZoom:true});
 }
 
 function mapView(){
@@ -418,7 +418,7 @@ function mapView(){
       showscale:true,colorbar:{thickness:12,len:.8}}}];
   Plotly.newPlot('map',data,{margin:{l:0,r:0,t:0,b:0},font:FONT,
     mapbox:{style:'open-street-map',center:{lat:clat||36.5,lon:clon||127.8},zoom:sido==='전국'?5.5:9.5}},
-    {responsive:true,displayModeBar:false});
+    {responsive:true,displayModeBar:false,scrollZoom:true});
   document.getElementById('mapNote').textContent=
     `점 하나가 읍·면·동(${dong.length.toLocaleString()}개)이에요. 색이 진할수록 값이 높아요. 마우스를 올리면 이름·값이 보여요.`;
 }
@@ -620,7 +620,7 @@ function cluMap(assign, K, rows){
     legend:{orientation:'h',y:1.0,x:0,bgcolor:'rgba(255,255,255,.7)'},
     mapbox:{style:'open-street-map',
       center:{lat:la.reduce((a,b)=>a+b,0)/la.length, lon:lo.reduce((a,b)=>a+b,0)/lo.length},
-      zoom:scope==='전국'?5.5:9}},{responsive:true,displayModeBar:false});
+      zoom:scope==='전국'?5.5:9}},{responsive:true,displayModeBar:false,scrollZoom:true});
 }
 
 function render(){
