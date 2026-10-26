@@ -392,7 +392,7 @@ function twinMap(row, scored){
   const span=Math.max(Math.max(...la)-Math.min(...la), Math.max(...lo)-Math.min(...lo));
   const zoom = span>3?5.2:span>1?7:span>0.3?9:11;
   Plotly.newPlot('twinMap',traces,{margin:{l:0,r:0,t:0,b:0},font:FONT,
-    mapbox:{style:'carto-positron',
+    mapbox:{style:'open-street-map',
       center:{lat:la.reduce((a,b)=>a+b,0)/la.length, lon:lo.reduce((a,b)=>a+b,0)/lo.length}, zoom}},
     {responsive:true,displayModeBar:false});
 }
@@ -417,7 +417,7 @@ function mapView(){
     marker:{size:8,opacity:.82,color:val,colorscale:scale,reversescale:false,
       showscale:true,colorbar:{thickness:12,len:.8}}}];
   Plotly.newPlot('map',data,{margin:{l:0,r:0,t:0,b:0},font:FONT,
-    mapbox:{style:'carto-positron',center:{lat:clat||36.5,lon:clon||127.8},zoom:sido==='전국'?5.5:9.5}},
+    mapbox:{style:'open-street-map',center:{lat:clat||36.5,lon:clon||127.8},zoom:sido==='전국'?5.5:9.5}},
     {responsive:true,displayModeBar:false});
   document.getElementById('mapNote').textContent=
     `점 하나가 읍·면·동(${dong.length.toLocaleString()}개)이에요. 색이 진할수록 값이 높아요. 마우스를 올리면 이름·값이 보여요.`;
@@ -618,7 +618,7 @@ function cluMap(assign, K, rows){
   const scope=document.getElementById('cluScope').value;
   Plotly.newPlot('cluMap',traces,{margin:{l:0,r:0,t:0,b:0},font:FONT,
     legend:{orientation:'h',y:1.0,x:0,bgcolor:'rgba(255,255,255,.7)'},
-    mapbox:{style:'carto-positron',
+    mapbox:{style:'open-street-map',
       center:{lat:la.reduce((a,b)=>a+b,0)/la.length, lon:lo.reduce((a,b)=>a+b,0)/lo.length},
       zoom:scope==='전국'?5.5:9}},{responsive:true,displayModeBar:false});
 }

@@ -381,7 +381,7 @@ with tab_twin:
             span = max(max(lats) - min(lats), max(lons) - min(lons))
             zoom = 5.2 if span > 3 else 7 if span > 1 else 9 if span > 0.3 else 11
             mfig.update_layout(height=420, margin=dict(l=0, r=0, t=0, b=0),
-                               mapbox=dict(style="carto-positron",
+                               mapbox=dict(style="open-street-map",
                                            center=dict(lat=np.mean(lats), lon=np.mean(lons)), zoom=zoom),
                                legend=dict(orientation="h", y=1.0))
             st.plotly_chart(mfig, use_container_width=True)
@@ -536,7 +536,7 @@ with tab_clu:
             lons = [ll[1] for ll in mp["latlon"]]
             cmfig.update_layout(height=520, margin=dict(l=0, r=0, t=0, b=0),
                                 legend=dict(orientation="h", y=1.0),
-                                mapbox=dict(style="carto-positron",
+                                mapbox=dict(style="open-street-map",
                                             center=dict(lat=np.mean(lats), lon=np.mean(lons)),
                                             zoom=5.5 if cscope == "전국" else 9))
             st.subheader("🗺️ 군집 지도")
@@ -565,7 +565,7 @@ with tab_map:
                   for n, v in zip(pool["행정구역"], pool[col])],
             hoverinfo="text"))
         fig.update_layout(height=600, margin=dict(l=0, r=0, t=0, b=0),
-                          mapbox=dict(style="carto-positron",
+                          mapbox=dict(style="open-street-map",
                                       center=dict(lat=np.mean(lats), lon=np.mean(lons)),
                                       zoom=5.5 if sido == "전국" else 9.5))
         st.plotly_chart(fig, use_container_width=True)
